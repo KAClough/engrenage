@@ -67,8 +67,8 @@ def get_rhs(t_i, current_state: np.ndarray, grid: Grid, background, matter, prog
 
     # Now enforce it
     bar_gamma_LL = get_bar_gamma_LL(r, bssn_vars.h_LL, background)
-    new_bar_gamma_LL = rescaling_factor[:,np.newaxis,np.newaxis] * bar_gamma_LL
-    bssn_vars.h_LL = (new_bar_gamma_LL - background.hat_gamma_LL) * background.inverse_scaling_matrix
+    bssn_vars.h_LL = (rescaling_factor[:,np.newaxis,np.newaxis] * 
+                        (bar_gamma_LL - background.hat_gamma_LL) * background.inverse_scaling_matrix)
         
     # Also limit the conformal factor so it doesn't blow up near BHs
     bssn_vars.phi = np.minimum(bssn_vars.phi, np.ones(N)*1.0e6)
@@ -98,8 +98,9 @@ def get_rhs(t_i, current_state: np.ndarray, grid: Grid, background, matter, prog
     # eta is the 1+log slicing damping coefficient - of order 1/M_adm of spacetime
     eta = 1.0
     bssn_rhs.b_U     += 0.75 * bssn_rhs.lambda_U - eta * bssn_vars.b_U
+    bssn_rhs.b_U     += 0.0 * 0.75 * 2.0 * eight_pi_G * bssn_vars.lapse[:, np.newaxis] * my_emtensor.Si_U * background.scaling_vector
     bssn_rhs.shift_U += bssn_vars.b_U
-    bssn_rhs.lapse   += - 2.0 * bssn_vars.lapse * bssn_vars.K        
+    bssn_rhs.lapse   += - 2.0 * bssn_vars.lapse * (bssn_vars.K + np.sqrt(24.0 * np.pi * my_emtensor.rho))    
         
     # Add advection to bssn time derivatives (this is the bit coming from the shift in the Lie derivative)
     # One sided stencils are used which helps stability

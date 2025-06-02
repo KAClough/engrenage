@@ -51,7 +51,7 @@ class ScalarMatter :
                                + self.V_of_u(self.u) )
         
         scalar_emtensor.Si = - self.v[:,np.newaxis] * self.d1_u
-        scalar_emtensor.Si_U = np.einsum('xij,xj->xi', bar_gamma_UU, scalar_emtensor.Si)
+        scalar_emtensor.Si_U = em4phi[:,np.newaxis] * np.einsum('xij,xj->xi', bar_gamma_UU, scalar_emtensor.Si)
         
         # Useful quantity Vt
         bar_gamma_LL = get_bar_gamma_LL(r, bssn_vars.h_LL, background)

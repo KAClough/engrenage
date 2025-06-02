@@ -77,7 +77,8 @@ def get_horizon_diagnostics(states_over_time, t, grid: Grid, background, matter)
         # Find horizon, i.e. zero crossings of omega (r * omega for better convergence)
         omega_i = omega[i,:]
         min_omega = min(omega_i)
-        r_min = r[np.where(omega_i == min_omega)][0]
+        # Take the outer value if multiple
+        r_min = r[np.where(omega_i == min_omega)][-1]
         if min_omega > 0:
             # no horizon
             ah_radius[i] = 0

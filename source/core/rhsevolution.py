@@ -98,7 +98,9 @@ def get_rhs(t_i, current_state: np.ndarray, grid: Grid, background, matter, prog
     # eta is the 1+log slicing damping coefficient - of order 1/M_adm of spacetime
     eta = 1.0
     bssn_rhs.b_U     += 0.75 * bssn_rhs.lambda_U - eta * bssn_vars.b_U
-    bssn_rhs.b_U     += 0.0 * 0.75 * 2.0 * eight_pi_G * bssn_vars.lapse[:, np.newaxis] * my_emtensor.Si_U * background.scaling_vector
+    #em4phi = np.exp(-4.0*bssn_vars.phi)
+    #bssn_rhs.b_U     += (0.75 * 2.0 * eight_pi_G * bssn_vars.lapse[:, np.newaxis] 
+    #                                * em4phi[:, np.newaxis] * my_emtensor.Si_U * background.scaling_vector)
     bssn_rhs.shift_U += bssn_vars.b_U
     bssn_rhs.lapse   += - 2.0 * bssn_vars.lapse * (bssn_vars.K + np.sqrt(24.0 * np.pi * my_emtensor.rho))    
         

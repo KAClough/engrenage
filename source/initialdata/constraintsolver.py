@@ -4,6 +4,7 @@ from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
 
 from core.grid import *
+from bssn.tensoralgebra import *
 
 class CTTKBHConstraintSolver :
     """Solves the constraints for a BH plus scalar configuration."""
@@ -14,6 +15,10 @@ class CTTKBHConstraintSolver :
         self.background_set = False
         self.matter_source_set = False
 
+        # Set params
+        self.scalar_mass = a_scalar_mass
+        self.MBH = a_MBH        
+        
         # to be set later or elsewhere
         self.u = []
         self.v = []
@@ -32,14 +37,13 @@ class CTTKBHConstraintSolver :
         self.r = a_r
         Rmax_approx = a_r[-1]+0.1 # set this roughly, fixed below
         dr = a_r[3]/2.0
-        Rmin = dr/2.0
+        Rmin = self.MBH / 10.0 + dr/2.0
         #print(dr, Rmin, Rmax_approx)
 
         # Work out R vector
         num_points = int((Rmax_approx - Rmin)/dr) + 1
         Rmax = Rmin + (num_points - 1) * dr
         self.R = np.linspace(Rmin, Rmax, num_points)
-        print(num_points, Rmin)
 
         # this is bar{gamma}_ij = psi^{-4} gamma_ij, flat conformal metric
         self.hrr = 1.0  
@@ -47,12 +51,7 @@ class CTTKBHConstraintSolver :
         self.hpp = self.R * self.R #sintheta = 1        
         
         # Set background solution
-        self.scalar_mass = a_scalar_mass
-        self.MBH = a_MBH
-        if self.MBH == 0.0 :
-            self.set_flat_background_solution()
-        else :
-            self.set_BH_background_solution()
+        self.set_BH_background_solution()
         
         # Set remaining vars to their initial values
         self.K = self.K0
@@ -71,24 +70,52 @@ class CTTKBHConstraintSolver :
         assert (self.background_set and self.matter_source_set), "BG and source not set"
         
         # Solve for the constraint vars
-        NL_iterations = 10
-        for i in np.arange(NL_iterations) :
+        error = 10.0
+        tol = 1.0e-1
+        max_iter = 200
+        iteration = 0
+        while ((error > tol) and (iteration < max_iter)):
+            # Because the convergence is oscillatory, best to only add a fraction of the correction each time
+            frac = (iteration + 0.5 * max_iter) / max_iter
+            frac = min(frac, 1.0)
             deltaK = self.get_deltaK() # Because Aij has changed
-            self.K = self.K + deltaK 
+            self.K = self.K0 + deltaK
+            Mom = self.get_Mom()
             cs = CubicSpline(self.R, deltaK)
             ddeltaKdr = cs(self.R, 1) # first derivative of dK
             # Solve for correction to Wr, sourced by change in dKdr
             Wr, dWrdr, Q = self.solve_for_Wr(ddeltaKdr)
-            self.Wr = self.Wr + Wr
-            self.dWrdr = self.dWrdr + dWrdr
-            self.Q = self.Q + Q
-            self.update_Aij_vars() # Need full Aijs for the Ham constraint       
+            self.Wr = self.Wr0 + frac * Wr
+            self.dWrdr = self.dWrdr0 + frac * dWrdr
+            self.Q = self.Q0 + frac * Q
+            self.update_Aij_vars() # Need full Aijs for the Ham constraint
+            Ham = self.get_Ham()
+            error = np.linalg.norm(Ham) + np.linalg.norm(Mom)
+            iteration = iteration + 1
+            #print("error is ", error, " after ", iteration)
         
+        print("error is: ", error, " after iter: ", iteration)
+ 
+        # One final iteration to make sure we add the full correction at least once
+        deltaK = self.get_deltaK() # Because Aij has changed
+        self.K = self.K0 + deltaK
+        cs = CubicSpline(self.R, deltaK)
+        ddeltaKdr = cs(self.R, 1) # first derivative of dK
+        # Solve for correction to Wr, sourced by change in dKdr
+        Wr, dWrdr, Q = self.solve_for_Wr(ddeltaKdr)
+        self.Wr = self.Wr0 + frac * Wr
+        self.dWrdr = self.dWrdr0 + frac * dWrdr        
+
+        # Fix Ham constraint last as we can do this to machine precision
+        deltaK = self.get_deltaK()
+        self.K = self.K0 + deltaK 
+
         # Plot to check internal measure of constraints
         Ham = self.get_Ham()
         Mom = self.get_Mom()
         plt.plot(self.R, Ham, '-')
         plt.plot(self.R, Mom, '--')
+        plt.ylim(-1.0, 1.0)
         plt.grid()
         
         # Convert quantities into the evolution vars
@@ -127,39 +154,40 @@ class CTTKBHConstraintSolver :
                     + 0.5 / (self.psi**4.0) * self.dudr * self.dudr
                     + 0.5 * self.v * self.v)
         self.SiU = self.v * self.dudr
-
+        
+        # Adjust psi solution for Schwazschild de Sitter??
+        #CC = eight_pi_G * self.rho
+        #self.psi = np.sqrt(1.0 + self.MBH/self.R - CC * self.R * self.R)        
+        #self.Lap_psi_over_psi5 = -0.25 * ((self.MBH**2.0 + 16.0 * CC * self.MBH * self.R**3.0 
+        #                                  + 4.0 * CC * self.R**4.0 * (3.0 - 2.0 * CC * self.R**2.0)) 
+        #                                  / ((self.MBH + self.R - CC * self.R**3.0)**4.0))
+        
         self.matter_source_set = True        
-
-    # Set flat BG solution
-    def set_flat_background_solution(self) :  
-        
-        self.psi = np.ones_like(self.R)
-        self.grr = self.psi**4.0 * self.hrr
-        self.gtt = self.psi**4.0 * self.htt
-        self.gpp = self.psi**4.0 * self.hpp
-        self.Lap_psi_over_psi5 = np.zeros_like(self.R)
-
-        self.K0 = np.zeros_like(self.R)
-        self.Wr0 = np.zeros_like(self.R)
-        self.dWrdr0 = np.zeros_like(self.R)
-        self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R        
-        
-        self.background_set = True
         
     # Set BH BG solution
     def set_BH_background_solution(self) :
         
+        #self.psi = (1.0 + 0.5 * self.MBH/self.R)
+        #self.grr = self.psi**4.0 * self.hrr
+        #self.gtt = self.psi**4.0 * self.htt
+        #self.gpp = self.psi**4.0 * self.hpp
+        #self.Lap_psi_over_psi5 = np.zeros_like(self.R)
+        #self.K0 = np.zeros_like(self.R)
+        #self.Wr0 = np.zeros_like(self.R)
+        #self.dWrdr0 = np.zeros_like(self.R)
+        #self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R  
+        
+        # Thomas solution
         self.psi = np.sqrt(1.0 + self.MBH/self.R)
         self.grr = self.psi**4.0 * self.hrr
         self.gtt = self.psi**4.0 * self.htt
         self.gpp = self.psi**4.0 * self.hpp
         self.Lap_psi_over_psi5 = - 0.25 * self.MBH * self.MBH * (self.MBH + self.R)**(-4.0)
-        
-        self.K0 = self.MBH / (self.R + self.MBH) / (self.R + self.MBH)
+        self.K0 = - self.MBH / (self.R + self.MBH) / (self.R + self.MBH)
         R2 = self.R * self.R
-        self.Wr0 = 0.5 * self.MBH / self.R + self.MBH / 3.0 / R2
-        self.dWrdr0 = - 0.5 * self.MBH / R2 - 2.0 / 3.0 * self.MBH / R2 / self.R
-        self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R
+        self.Wr0 = - (0.5 * self.MBH / self.R + self.MBH * self.MBH / 3.0 / R2)
+        self.dWrdr0 = (0.5 * self.MBH / R2 + 2.0 / 3.0 * self.MBH * self.MBH / R2 / self.R)
+        self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R      
         
         self.background_set = True
         
@@ -175,7 +203,7 @@ class CTTKBHConstraintSolver :
         dydr[0] = Qr - 2 * Wr / r_here
         # This is dQdr, where Q = dWdr + 2W/r 
         SiU = 0.0
-        dydr[1] = 6.0 * np.pi * psi**10.0 * SiU + 0.5 * psi**6.0 * dKdr
+        dydr[1] = 0.75 * eight_pi_G * psi**10.0 * SiU + 0.5 * psi**6.0 * dKdr
     
         return dydr
     
@@ -216,11 +244,11 @@ class CTTKBHConstraintSolver :
     def get_deltaK(self) :
         """Returns the value of K from the Ham constraint"""
     
-        Ksquared = 12.0 * self.Lap_psi_over_psi5 + 1.5 * self.AijAij + 24.0 * np.pi * self.rho
+        Ksquared = 12.0 * self.Lap_psi_over_psi5 + 1.5 * self.AijAij + 3.0 * eight_pi_G * self.rho
     
-        minusK = - np.sqrt(Ksquared)
+        minusK = - np.sqrt(np.abs(Ksquared))
     
-        deltaK = minusK - self.K
+        deltaK = minusK - self.K0
     
         return deltaK
     
@@ -257,19 +285,21 @@ class CTTKBHConstraintSolver :
         self.Att = 2.0/3.0 * (- R2 * self.dWrdr + self.R * self.Wr)
         self.App = 2.0/3.0 * (- R2 * self.dWrdr + self.R * self.Wr)
         
-        self.AijAij = (self.psi)**(-12.0) * (self.Arr * self.Arr / self.hrr / self.hrr 
-                                          + self.Att * self.Att / self.htt / self.htt
-                                          + self.App * self.App / self.hpp / self.hpp)
+        #self.AijAij = (self.psi)**(-12.0) * (self.Arr * self.Arr / self.hrr / self.hrr 
+        #                                  + self.Att * self.Att / self.htt / self.htt
+        #                                  + self.App * self.App / self.hpp / self.hpp)
+        
+        self.AijAij = (self.psi)**(-12.0) * 24.0/9.0 *(self.Q - 3.0 * self.Wr/self.R)**2.0
     
     def get_Ham(self) :
         """Returns the value of the Ham constraint"""
     
-        Ham = (self.K * self.K 
+        Ham_out = (self.K * self.K 
                - 1.5 * self.AijAij 
-               - 24.0 * np.pi * self.rho 
+               - 3.0 * eight_pi_G * self.rho 
                - 12.0 * self.Lap_psi_over_psi5)
     
-        return Ham
+        return Ham_out
 
     def get_Mom(self) :
         """Returns the value of the Mom constraint"""
@@ -280,6 +310,6 @@ class CTTKBHConstraintSolver :
         csK = CubicSpline(self.R, self.K)
         dKdr = csK(self.R, 1)
     
-        Mom = dQdr - 6.0 * np.pi * self.psi**10.0 * self.SiU - 0.5 * self.psi**6.0 * dKdr
+        Mom_out = dQdr - 0.75 * eight_pi_G * self.psi**10.0 * self.SiU - 0.5 * self.psi**6.0 * dKdr
     
-        return Mom
+        return Mom_out

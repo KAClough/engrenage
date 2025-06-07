@@ -40,13 +40,13 @@ def get_initial_state(grid: Grid, background) :
     ) = initial_state
 
     # Set BH length scale, initial scalar data
-    GM = 0.2
+    GM = 0.0
     scalar_mass = 1.0
     
     # Set scalar field values
     scalar_matter = ScalarMatter(scalar_mass)
     
-    Rbubble = 5.0
+    Rbubble = 10.0
     Abubble = 0.5 * np.sqrt(2.0) # Makes the initial H_0 = 1.0 in code units in the blob
     u[:] = Abubble * (1.0 - np.tanh(r - Rbubble))
     v[:] = 0.0

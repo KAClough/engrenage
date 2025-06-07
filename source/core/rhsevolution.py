@@ -96,13 +96,32 @@ def get_rhs(t_i, current_state: np.ndarray, grid: Grid, background, matter, prog
     
     # Set the gauge evolution for the lapse and shift
     # eta is the 1+log slicing damping coefficient - of order 1/M_adm of spacetime
-    eta = 1.0
-    bssn_rhs.b_U     += 0.75 * bssn_rhs.lambda_U - eta * bssn_vars.b_U
+    eta = 50.0
+    e4phi = np.exp(4.0*bssn_vars.phi)
+    bar_gamma_UU = get_bar_gamma_UU(r, bssn_vars.h_LL, background)
+    remove_dldt = - 1.0 * background.scaling_vector * ((four_thirds * bssn_vars.lapse[:,np.newaxis] 
+                                                  * np.einsum('xij,xj->xi', bar_gamma_UU, d1.K)) +
+                                                 (2.0 * eight_pi_G * bssn_vars.lapse[:, np.newaxis] 
+                                                  * e4phi[:, np.newaxis] * my_emtensor.Si_U))
+    
+    bssn_rhs.b_U     = 0.75 * (bssn_rhs.lambda_U - remove_dldt) - eta * bssn_vars.b_U
+    bssn_rhs.shift_U  = bssn_vars.b_U
+    
     #em4phi = np.exp(-4.0*bssn_vars.phi)
-    #bssn_rhs.b_U     += (0.75 * 2.0 * eight_pi_G * bssn_vars.lapse[:, np.newaxis] 
-    #                                * em4phi[:, np.newaxis] * my_emtensor.Si_U * background.scaling_vector)
-    bssn_rhs.shift_U += bssn_vars.b_U
-    bssn_rhs.lapse   += - 2.0 * bssn_vars.lapse * (bssn_vars.K + np.sqrt(24.0 * np.pi * my_emtensor.rho))    
+    #bar_gamma_LL = get_bar_gamma_LL(r, bssn_vars.h_LL, background)
+    #Delta_U, Delta_ULL, Delta_LLL  = get_tensor_connections(r, bssn_vars.h_LL, d1.h_LL, background)    
+    #bar_chris = get_bar_christoffel(r, Delta_ULL, background)  
+    #bar_Rij = get_bar_ricci_tensor(r, bssn_vars.h_LL, d1.h_LL, d2.h_LL, bssn_vars.lambda_U, d1.lambda_U, 
+    #                     Delta_U, Delta_ULL, Delta_LLL, 
+    #                     bar_gamma_UU, bar_gamma_LL, background)
+    #bar_R   = get_trace(bar_Rij, bar_gamma_UU)
+    
+    # Lapse condition
+    kappa_lapse = 0.0
+    Asquared = get_bar_A_squared(r, bssn_vars, background)    
+    bssn_rhs.lapse    = - (0.33*(bssn_vars.lapse * bssn_vars.lapse + kappa_lapse)
+                            * (bssn_vars.K + np.sqrt(24.0 * np.pi * my_emtensor.rho + 1.5 * Asquared)))
+    #bssn_rhs.lapse   += np.einsum('xj,xj->x', background.inverse_scaling_vector * bssn_vars.shift_U, advec.lapse)  
         
     # Add advection to bssn time derivatives (this is the bit coming from the shift in the Lie derivative)
     # One sided stencils are used which helps stability
@@ -142,7 +161,7 @@ def get_rhs(t_i, current_state: np.ndarray, grid: Grid, background, matter, prog
     # max sigma ~ dx / dt so dt max = dx / sigma. 
     # Since dt < 0.5 dx_min for stability anyway we can usually quite safely pick sigma = 1.0
     # but it seems to work best when weighted by the lapse and conformal factor too
-    sigma = 1.0 * bssn_vars.lapse * np.exp(-2.0*bssn_vars.phi)
+    sigma = 2.0 * bssn_vars.lapse * np.exp(-2.0*bssn_vars.phi)
     
     diss = sigma * grid.get_kreiss_oliger_diss(unflattened_state)
     rhs_state += sigma * diss 

@@ -71,8 +71,8 @@ class CTTKBHConstraintSolver :
         
         # Solve for the constraint vars
         error = 10.0
-        tol = 1.0e-1
-        max_iter = 200
+        tol = 1.0e-2
+        max_iter = 50
         iteration = 0
         while ((error > tol) and (iteration < max_iter)):
             # Because the convergence is oscillatory, best to only add a fraction of the correction each time
@@ -167,27 +167,27 @@ class CTTKBHConstraintSolver :
     # Set BH BG solution
     def set_BH_background_solution(self) :
         
-        #self.psi = (1.0 + 0.5 * self.MBH/self.R)
-        #self.grr = self.psi**4.0 * self.hrr
-        #self.gtt = self.psi**4.0 * self.htt
-        #self.gpp = self.psi**4.0 * self.hpp
-        #self.Lap_psi_over_psi5 = np.zeros_like(self.R)
-        #self.K0 = np.zeros_like(self.R)
-        #self.Wr0 = np.zeros_like(self.R)
-        #self.dWrdr0 = np.zeros_like(self.R)
-        #self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R  
-        
-        # Thomas solution
-        self.psi = np.sqrt(1.0 + self.MBH/self.R)
+        self.psi = (1.0 + 0.5 * self.MBH/self.R)
         self.grr = self.psi**4.0 * self.hrr
         self.gtt = self.psi**4.0 * self.htt
         self.gpp = self.psi**4.0 * self.hpp
-        self.Lap_psi_over_psi5 = - 0.25 * self.MBH * self.MBH * (self.MBH + self.R)**(-4.0)
-        self.K0 = - self.MBH / (self.R + self.MBH) / (self.R + self.MBH)
-        R2 = self.R * self.R
-        self.Wr0 = - (0.5 * self.MBH / self.R + self.MBH * self.MBH / 3.0 / R2)
-        self.dWrdr0 = (0.5 * self.MBH / R2 + 2.0 / 3.0 * self.MBH * self.MBH / R2 / self.R)
-        self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R      
+        self.Lap_psi_over_psi5 = np.zeros_like(self.R)
+        self.K0 = np.zeros_like(self.R)
+        self.Wr0 = np.zeros_like(self.R)
+        self.dWrdr0 = np.zeros_like(self.R)
+        self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R  
+        
+        # Thomas solution
+        #self.psi = np.sqrt(1.0 + self.MBH/self.R)
+        #self.grr = self.psi**4.0 * self.hrr
+        #self.gtt = self.psi**4.0 * self.htt
+        #self.gpp = self.psi**4.0 * self.hpp
+        #self.Lap_psi_over_psi5 = - 0.25 * self.MBH * self.MBH * (self.MBH + self.R)**(-4.0)
+        #self.K0 = - self.MBH / (self.R + self.MBH) / (self.R + self.MBH)
+        #R2 = self.R * self.R
+        #self.Wr0 = - (0.5 * self.MBH / self.R + self.MBH * self.MBH / 3.0 / R2)
+        #self.dWrdr0 = (0.5 * self.MBH / R2 + 2.0 / 3.0 * self.MBH * self.MBH / R2 / self.R)
+        #self.Q0 = self.dWrdr0 + 2.0 * self.Wr0 / self.R      
         
         self.background_set = True
         
